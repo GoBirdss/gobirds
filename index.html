@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Merrill Time">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Merrill Time</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: #004C54; color: #fff; font-family: -apple-system, Helvetica, sans-serif; }
+  body { padding-bottom: env(safe-area-inset-bottom); -webkit-user-select: none; user-select: none; }
+  .app { max-width: 480px; margin: 0 auto; }
+  .title { background: #000; padding: calc(env(safe-area-inset-top) + 14px) 18px 10px; border-bottom: 3px solid #A5ACAF; display: flex; justify-content: space-between; align-items: baseline; }
+  .title b { font-size: 26px; letter-spacing: 2px; font-style: italic; }
+  .title span { color: #A5ACAF; font-size: 16px; font-weight: 600; }
+  .top { padding: 14px 16px 0; display: flex; align-items: center; gap: 12px; }
+  .play { flex: 1; height: 60px; border: none; border-radius: 30px; background: #fff; color: #004C54; font-size: 22px; font-weight: 700; }
+  .play.on { background: #000; color: #fff; border: 3px solid #A5ACAF; }
+  .info { font-size: 15px; line-height: 1.4; width: 130px; }
+  .logo { padding: 18px 10px 8px; }
+  .btns { display: flex; gap: 12px; }
+  .big { flex: 1; height: 110px; border-radius: 14px; font-size: 25px; font-weight: 800; letter-spacing: 1px; padding: 0; }
+  .big.saw { background: #fff; color: #004C54; border: 4px solid #000; }
+  .big.heard { background: #000; color: #fff; border: 4px solid #A5ACAF; }
+  .big.armed { box-shadow: 0 0 0 5px #FFD400; }
+  .readout { text-align: center; margin-top: 2px; }
+  .readout small { color: #A5ACAF; font-size: 16px; letter-spacing: 2px; font-weight: 600; }
+  .readout div { font-size: 48px; font-weight: 700; font-family: Menlo, monospace; }
+  .status { font-size: 18px; text-align: center; min-height: 52px; padding: 4px 18px 0; line-height: 1.4; }
+  .row { padding: 10px 16px 0; }
+  .lbls { display: flex; justify-content: space-between; font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 6px; }
+  .fth { height: 60px; border: none; font-size: 20px; font-weight: 800; }
+  .fth.s { background: #A5ACAF; color: #000; clip-path: polygon(10% 0,100% 0,90% 100%,0 100%); }
+  .fth.l { background: #fff; color: #004C54; clip-path: polygon(0 0,90% 0,100% 100%,10% 100%); }
+  .fth:active, .big:active, .play:active { transform: scale(0.96); }
+  input[type=range] { width: 100%; height: 40px; accent-color: #fff; }
+  .fine { color: #A5ACAF; font-size: 13px; text-align: center; padding: 0 20px 24px; line-height: 1.4; }
+  input[type=range]::-webkit-slider-thumb { transform: scale(1.8); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="title"><b>MERRILL TIME</b><span>WIP 94.1</span></div>
+  <div class="top">
+    <button class="play" id="play">&#9654; LISTEN</button>
+    <div class="info" id="info">Not playing</div>
+  </div>
+  <div class="logo">
+    <div class="btns">
+      <button class="big heard" id="heard">I HEARD IT</button>
+      <button class="big saw" id="saw">I SAW IT</button>
+    </div>
+  </div>
+  <div class="readout"><small>DELAY</small><div id="val">0.00 s</div></div>
+  <div class="status" id="status">Press I SAW IT when you see the play. Press I HEARD IT when Merrill calls it.</div>
+  <div class="row">
+    <div class="lbls"><span>Radio sooner</span><span>Radio later</span></div>
+    <div class="grid">
+      <button class="fth s" data-d="-1">-1 s</button><button class="fth s" data-d="-0.25">-0.25</button><button class="fth s" data-d="-0.05">-0.05</button>
+    </div>
+    <div class="grid">
+      <button class="fth l" data-d="0.05">+0.05</button><button class="fth l" data-d="0.25">+0.25</button><button class="fth l" data-d="1">+1 s</button>
+    </div>
+  </div>
+  <div class="row" style="padding-bottom:8px">
+    <input type="range" id="slider" min="0" max="120" step="0.05" value="0">
+    <div class="lbls"><span>Sooner (0 s)</span><span>Later (120 s)</span></div>
+  </div>
+  <p class="fine">Unofficial fan tool. Not affiliated with the Philadelphia Eagles, the NFL, Audacy, WIP, or Merrill Reese. Free, no ads.</p>
+</div>
+<script>
+// ---------- Settings ----------
+const MASTER_URL = 'https://live.amperwave.net/manifest/audacy-wipfmaac-hlsc.m3u8';
+const MAX_DELAY = 120;
+const HEADROOM = 18;      // seconds kept behind the newest downloaded audio so chunks arrive in time
+const LOOKAHEAD = 12;     // seconds of audio scheduled ahead
+const POLL_MS = 4000;
+const TAP_TIMEOUT_MS = 30000;
+
+// ---------- UI ----------
+const $ = id => document.getElementById(id);
+const slider = $('slider'), val = $('val'), statusEl = $('status'), info = $('info'), playBtn = $('play');
+const sawBtn = $('saw'), heardBtn = $('heard');
+const IDLE_MSG = 'Press I SAW IT when you see the play. Press I HEARD IT when Merrill calls it.';
+
+let delay = 0;
+try { delay = Math.min(MAX_DELAY, Math.max(0, parseFloat(localStorage.getItem('merrillDelay')) || 0)); } catch (e) {}
+
+function showDelay() { slider.value = delay; val.textContent = delay.toFixed(2) + ' s'; }
+
+function setDelay(d) {
+  d = Math.round(Math.min(MAX_DELAY, Math.max(0, d)) * 100) / 100;
+  if (d === delay) return;
+  delay = d;
+  showDelay();
+  try { localStorage.setItem('merrillDelay', String(delay)); } catch (e) {}
+  reschedule();
+}
+
+slider.addEventListener('input', () => setDelay(parseFloat(slider.value)));
+document.querySelectorAll('.fth').forEach(b => b.addEventListener('click', () => setDelay(delay + parseFloat(b.dataset.d))));
+
+let firstTap = null;
+function resetTaps() { firstTap = null; sawBtn.classList.remove('armed'); heardBtn.classList.remove('armed'); }
+function tap(kind) {
+  const now = performance.now();
+  if (!firstTap || firstTap.kind === kind) {
+    firstTap = { kind, t: now };
+    sawBtn.classList.toggle('armed', kind === 'saw');
+    heardBtn.classList.toggle('armed', kind === 'heard');
+    statusEl.textContent = kind === 'saw' ? 'Got it. Now press I HEARD IT when Merrill calls it.'
+                                          : 'Got it. Now press I SAW IT when the TV shows it.';
+    return;
+  }
+  const gap = (now - firstTap.t) / 1000;
+  const radioAhead = firstTap.kind === 'heard';   // heard before saw: radio is early, so add delay
+  setDelay(delay + (radioAhead ? gap : -gap));
+  statusEl.textContent = 'Radio was ' + gap.toFixed(2) + ' s ' + (radioAhead ? 'ahead' : 'behind') + '. Delay is now ' + delay.toFixed(2) + ' s.';
+  resetTaps();
+}
+// pointerdown so the timestamp is taken the instant the finger lands
+sawBtn.addEventListener('pointerdown', e => { e.preventDefault(); tap('saw'); });
+heardBtn.addEventListener('pointerdown', e => { e.preventDefault(); tap('heard'); });
+setInterval(() => {
+  if (firstTap && performance.now() - firstTap.t > TAP_TIMEOUT_MS) { resetTaps(); statusEl.textContent = 'No second press within 30 seconds. Start again.'; }
+}, 1000);
+
+// ---------- Audio engine ----------
+// Stream time: seconds along the radio stream, built from the HLS segment durations.
+// The newest downloaded audio is pinned to "now" when listening starts (the anchor), and
+// playback runs HEADROOM + delay seconds behind that.
+let ctx = null, gain = null, playing = false;
+let variantUrl = null, segs = new Map(), lastEnd = null, anchor = null, pollTimer = null, tickTimer = null, failures = 0, wakeLock = null;
+
+function stripId3(ab) {
+  const b = new Uint8Array(ab);
+  if (b.length > 10 && b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) {
+    const size = (b[6] << 21) | (b[7] << 14) | (b[8] << 7) | b[9];
+    const skip = 10 + size + ((b[5] & 0x10) ? 10 : 0);
+    return ab.slice(skip);
+  }
+  return ab;
+}
+
+async function fetchText(url) {
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return { text: await r.text(), url: r.url };
+}
+
+function parsePlaylist(text, base) {
+  const out = []; let dur = null;
+  for (const raw of text.split('\n')) {
+    const l = raw.trim();
+    if (l.startsWith('#EXTINF:')) dur = parseFloat(l.slice(8));
+    else if (l && !l.startsWith('#')) { out.push({ url: new URL(l, base).href, dur: dur || 10 }); dur = null; }
+  }
+  return out;
+}
+
+async function loadSegment(s) {
+  try {
+    const r = await fetch(s.url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    s.buf = await ctx.decodeAudioData(stripId3(await r.arrayBuffer()));
+    schedule();
+  } catch (e) { s.failed = true; }
+}
+
+async function poll() {
+  if (!playing) return;
+  try {
+    if (!variantUrl) {
+      const m = await fetchText(MASTER_URL);
+      const first = m.text.split('\n').map(x => x.trim()).find(x => x && !x.startsWith('#'));
+      variantUrl = new URL(first, m.url).href;
+    }
+    const p = await fetchText(variantUrl);
+    let prev = null;
+    for (const e of parsePlaylist(p.text, p.url)) {
+      let s = segs.get(e.url);
+      if (!s) {
+        const start = prev ? prev.start + prev.dur : (lastEnd ?? 0);
+        s = { url: e.url, dur: e.dur, start, buf: null, node: null };
+        segs.set(e.url, s);
+        lastEnd = Math.max(lastEnd ?? 0, start + e.dur);
+        loadSegment(s);
+      }
+      prev = s;
+    }
+    if (!anchor && lastEnd !== null) anchor = { stream: lastEnd, ctx: ctx.currentTime, wall: performance.now() / 1000 };
+    failures = 0;
+  } catch (e) {
+    if (++failures >= 2) variantUrl = null;   // ask for a fresh stream session
+  }
+  if (playing) pollTimer = setTimeout(poll, POLL_MS);
+}
+
+// ctx time at which a given stream time plays
+function offset() { return anchor.ctx - anchor.stream + HEADROOM + delay; }
+
+function schedule() {
+  if (!playing || !anchor) return;
+  const now = ctx.currentTime, off = offset();
+  for (const s of segs.values()) {
+    if (!s.buf || s.node) continue;
+    const t0 = s.start + off, t1 = t0 + s.dur;
+    if (t1 <= now + 0.05 || t0 > now + LOOKAHEAD) continue;
+    const src = ctx.createBufferSource();
+    src.buffer = s.buf;
+    src.connect(gain);
+    const len = Math.min(s.dur, s.buf.duration);
+    if (t0 >= now + 0.05) src.start(t0, 0, len);
+    else { const into = now + 0.05 - t0; if (into >= len) continue; src.start(now + 0.05, into, len - into); }
+    src.onended = () => { if (s.node === src) s.node = null; };
+    s.node = src;
+  }
+}
+
+function stopNodes() {
+  for (const s of segs.values()) if (s.node) { s.node.onended = null; try { s.node.stop(); } catch (e) {} s.node = null; }
+}
+
+let rescheduleTimer = null;
+function reschedule() {
+  if (!playing || !anchor) return;
+  const now = ctx.currentTime;
+  gain.gain.cancelScheduledValues(now);
+  gain.gain.setValueAtTime(gain.gain.value, now);
+  gain.gain.linearRampToValueAtTime(0, now + 0.03);
+  clearTimeout(rescheduleTimer);
+  rescheduleTimer = setTimeout(() => {
+    stopNodes();
+    schedule();
+    const t = ctx.currentTime;
+    gain.gain.cancelScheduledValues(t);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(1, t + 0.08);
+  }, 40);
+}
+
+function tick() {
+  if (!playing) return;
+  if (anchor) {
+    // If iOS paused the audio clock (call, Siri, lock), slide the anchor so the delay stays the same.
+    const drift = (performance.now() / 1000 - anchor.wall) - (ctx.currentTime - anchor.ctx);
+    if (Math.abs(drift) > 0.5) { anchor.ctx += drift; reschedule(); }
+
+    // Forget audio older than the longest possible delay.
+    const liveNow = ctx.currentTime - anchor.ctx + anchor.stream;
+    for (const [k, s] of segs) if (!s.node && s.start + s.dur < liveNow - HEADROOM - MAX_DELAY - 15) segs.delete(k);
+
+    schedule();
+
+    const pos = ctx.currentTime - offset();
+    let earliest = Infinity, covered = false;
+    for (const s of segs.values()) if (s.buf) { earliest = Math.min(earliest, s.start); if (pos >= s.start && pos < s.start + s.dur) covered = true; }
+    if (covered) info.textContent = 'Playing WIP';
+    else if (pos < earliest) info.textContent = 'Starting in ' + Math.ceil(earliest - pos) + ' s';
+    else info.textContent = 'Loading…';
+  } else {
+    info.textContent = 'Connecting…';
+  }
+  if (ctx.state !== 'running') ctx.resume();
+}
+
+async function keepAwake() {
+  try { if ('wakeLock' in navigator && document.visibilityState === 'visible') wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && playing) { keepAwake(); if (ctx.state !== 'running') ctx.resume(); }
+});
+
+function start() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}  // play even with the ring switch on silent
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  ctx.resume();
+  gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  playing = true;
+  playBtn.classList.add('on');
+  playBtn.innerHTML = '&#9632; STOP';
+  info.textContent = 'Connecting…';
+  poll();
+  tickTimer = setInterval(tick, 250);
+  keepAwake();
+}
+
+function stop() {
+  playing = false;
+  clearTimeout(pollTimer); clearInterval(tickTimer); clearTimeout(rescheduleTimer);
+  stopNodes();
+  segs = new Map(); lastEnd = null; anchor = null; variantUrl = null; failures = 0;
+  if (ctx) ctx.close();
+  ctx = null;
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  playBtn.classList.remove('on');
+  playBtn.innerHTML = '&#9654; LISTEN';
+  info.textContent = 'Not playing';
+}
+
+playBtn.addEventListener('click', () => playing ? stop() : start());
+
+showDelay();
+statusEl.textContent = IDLE_MSG;
+</script>
+</body>
+</html>
